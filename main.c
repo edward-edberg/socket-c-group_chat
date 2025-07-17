@@ -33,6 +33,14 @@
 
 #include "socketutils.h"
 #include <stdbool.h>
+
+#include <pthread.h>
+
+void startListenThread(int socketFD);
+
+void* listenForData(void *arg);
+
+
 int main(){
 
     int socketFD = createTCPIPv4Socket();
@@ -54,19 +62,33 @@ int main(){
         printf("Connection successful\n");
     }
     // --- End Connect Functionality ---
+    startListenThread(socketFD);
 
+    // add name and print it
+
+    char *name = NULL;
+    size_t nameSize = 0;
+    printf("Enter your name:");
+    ssize_t nameCount = getline(&name, &nameSize, stdin);
+    name[nameCount-1] = 0;
 
     char *line = NULL;
     size_t lineSize = 0;
     printf("Type something and we will send it to the server. Type exit to close the program~\n");
 
+
+    char buffer[1024];
     while(true){
         ssize_t charCount = getline(&line, &lineSize,stdin);
+        line[charCount-1] = 0;
+
+        sprintf(buffer, "%s:%s", name, line);
+        // printf("Sending: %s", buffer);
         if (charCount > 0){
             if (strcmp(line, "exit\n") == 0){
                 break;
             }
-            ssize_t amountWasSent = send(socketFD, line, charCount, 0);
+            ssize_t amountWasSent = send(socketFD, buffer, strlen(buffer), 0);
 
         }
     }
@@ -82,4 +104,36 @@ int main(){
     close(socketFD);
     printf("Socket closed.\n");
     return 0;
+}
+
+void startListenThread(int socketFD){
+    pthread_t id;
+    int *socketPtr = malloc(sizeof(int));
+    *socketPtr = socketFD;
+    pthread_create(&id, NULL, listenForData, socketPtr);
+}
+
+void* listenForData(void *arg){
+    printf("Listening for data...\n");
+    // int socketFD;
+    int socketFD = *(int *)arg;
+    char buffer[1024];
+
+    while(true)
+    {
+        ssize_t amountReceived = recv(socketFD, buffer, 1024, 0);
+
+        if (amountReceived > 0)
+        {
+            buffer[amountReceived] = '\0';
+            printf("Response from server:\n%s\n", buffer);
+        }
+        else
+        {
+            printf("Error receiving data\n");
+            break;
+        }
+    }
+    close(socketFD);
+    return NULL;
 }
